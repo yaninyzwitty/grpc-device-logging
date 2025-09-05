@@ -1,0 +1,12 @@
+---
+debug: true
+
+appPort: 50051
+metricsPort: 9090
+
+database:
+  user: myuser
+  password: mypassword
+  host: localhost:5432
+  database: mydb
+  maxConnections: 10
