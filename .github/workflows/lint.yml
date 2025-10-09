@@ -1,9 +1,8 @@
 name: golangci-lint
+
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
   pull_request:
 
 permissions:
@@ -13,15 +12,15 @@ jobs:
   golangci:
     name: lint
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-go@v6
         with:
-          go-version: stable # or "1.23.x" for a pinned version
+          go-version: stable
 
-      # Cache Go modules
-      - name: Cache Go Modules
+      - name: Cache Go Modules & Build
         uses: actions/cache@v4
         with:
           path: |
@@ -31,7 +30,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      # Cache golangci-lint itself
       - name: Cache golangci-lint
         uses: actions/cache@v4
         with:
@@ -43,4 +41,4 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.1
+          version: latest
