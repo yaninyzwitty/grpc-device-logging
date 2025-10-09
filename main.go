@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"net"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,9 +17,13 @@ import (
 	"github.com/yaninyzwitty/grpc-device-logging/db"
 	"github.com/yaninyzwitty/grpc-device-logging/device"
 	devicev1 "github.com/yaninyzwitty/grpc-device-logging/gen/device/v1"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	mon "github.com/yaninyzwitty/grpc-device-logging/metrics"
 	"github.com/yaninyzwitty/grpc-device-logging/util"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type server struct {
@@ -28,14 +33,22 @@ type server struct {
 	devicev1.UnimplementedCloudServiceServer
 }
 
+var (
+	system = "" // empty string refers to overall service health
+	sleep  = flag.Duration("sleep", time.Second*5, "duration between changes in health")
+)
+
 func main() {
 	cp := flag.String("config", "", "Path to config file")
 	flag.Parse()
-	ctx, done := context.WithCancel(context.Background())
-	defer done()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	cfg := new(config.Config)
-	cfg.LoadConfig(*cp)
+	if err := cfg.LoadConfig(*cp); err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
 
 	if cfg.Debug {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
@@ -49,64 +62,83 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+
 	s := grpc.NewServer()
+
+	// Health check registration
+	healthServer := health.NewServer()
+	healthgrpc.RegisterHealthServer(s, healthServer)
 
 	ns := newServer(ctx, cfg, reg)
 	devicev1.RegisterCloudServiceServer(s, ns)
+
 	slog.Info("gRPC server starting", "port", cfg.AppPort)
 
-	s.Serve(lis)
+	// Async health toggler (example mock logic)
+	go func() {
+		status := healthpb.HealthCheckResponse_SERVING
+		for {
+			healthServer.SetServingStatus(system, status)
+			if status == healthpb.HealthCheckResponse_SERVING {
+				status = healthpb.HealthCheckResponse_NOT_SERVING
+			} else {
+				status = healthpb.HealthCheckResponse_SERVING
+			}
+			time.Sleep(*sleep)
+		}
+	}()
+
+	if err := s.Serve(lis); err != nil {
+		slog.Error("failed to serve", "error", err)
+		os.Exit(1)
+	}
 }
 
 func newServer(ctx context.Context, cfg *config.Config, reg *prometheus.Registry) *server {
 	m := mon.NewMetrics(reg)
-	r := server{
+	return &server{
 		cfg: cfg,
 		m:   m,
+		db:  db.DbConnect(ctx, cfg),
 	}
-	r.db = db.DbConnect(ctx, cfg)
-	return &r
-
 }
 
+// --- Handler: GetDevices
 func (s *server) GetDevices(ctx context.Context, req *devicev1.GetDevicesRequest) (*devicev1.GetDevicesResponse, error) {
-	ds := []*devicev1.Device{
-		{
-			Id:        1,
-			Uuid:      "9add349c-c35c-4d32-ab0f-53da1ba40a2a",
-			Mac:       "EF-2B-C4-F5-D6-34",
-			Firmware:  "2.1.5",
-			CreatedAt: "2024-05-28T15:21:51.137Z",
-			UpdatedAt: "2024-05-28T15:21:51.137Z",
+	return &devicev1.GetDevicesResponse{
+		Devices: []*devicev1.Device{
+			{
+				Id:        1,
+				Uuid:      "9add349c-c35c-4d32-ab0f-53da1ba40a2a",
+				Mac:       "EF-2B-C4-F5-D6-34",
+				Firmware:  "2.1.5",
+				CreatedAt: "2024-05-28T15:21:51.137Z",
+				UpdatedAt: "2024-05-28T15:21:51.137Z",
+			},
+			{
+				Id:        2,
+				Uuid:      "d2293412-36eb-46e7-9231-af7e9249fffe",
+				Mac:       "E7-34-96-33-0C-4C",
+				Firmware:  "1.0.3",
+				CreatedAt: "2024-01-28T15:20:51.137Z",
+				UpdatedAt: "2024-01-28T15:20:51.137Z",
+			},
+			{
+				Id:        3,
+				Uuid:      "eee58ca8-ca51-47a5-ab48-163fd0e44b77",
+				Mac:       "68-93-9B-B5-33-B9",
+				Firmware:  "4.3.1",
+				CreatedAt: "2024-08-28T15:18:21.137Z",
+				UpdatedAt: "2024-08-28T15:18:21.137Z",
+			},
 		},
-		{
-			Id:        2,
-			Uuid:      "d2293412-36eb-46e7-9231-af7e9249fffe",
-			Mac:       "E7-34-96-33-0C-4C",
-			Firmware:  "1.0.3",
-			CreatedAt: "2024-01-28T15:20:51.137Z",
-			UpdatedAt: "2024-01-28T15:20:51.137Z",
-		},
-		{
-			Id:        3,
-			Uuid:      "eee58ca8-ca51-47a5-ab48-163fd0e44b77",
-			Mac:       "68-93-9B-B5-33-B9",
-			Firmware:  "4.3.1",
-			CreatedAt: "2024-08-28T15:18:21.137Z",
-			UpdatedAt: "2024-08-28T15:18:21.137Z",
-		},
-	}
-
-	dr := devicev1.GetDevicesResponse{
-		Devices: ds,
-	}
-	return &dr, nil
+	}, nil
 }
 
+// --- Handler: CreateDevice
 func (s *server) CreateDevice(ctx context.Context, req *devicev1.CreateDeviceRequest) (*devicev1.CreateDeviceResponse, error) {
 	now := time.Now().Format(time.RFC3339Nano)
 
-	// Map request to internal device model
 	d := &device.Device{
 		Device: devicev1.Device{
 			Uuid:      uuid.New().String(),
@@ -117,15 +149,12 @@ func (s *server) CreateDevice(ctx context.Context, req *devicev1.CreateDeviceReq
 		},
 	}
 
-	err := d.Insert(ctx, s.db, s.m)
-	if err != nil {
-		s.m.Errors.With(prometheus.Labels{"op": "insert", "db": "postgres"}).Add(1)
+	if err := d.Insert(ctx, s.db, s.m); err != nil {
+		s.m.Errors.With(prometheus.Labels{"op": "insert", "db": "postgres"}).Inc()
 		util.Warn(err, "failed to save device in postgres")
 		return nil, err
 	}
+
 	slog.Debug("device saved in postgres", "id", d.Device.Id, "mac", d.Device.Mac, "firmware", d.Device.Firmware)
-
-	resp := &devicev1.CreateDeviceResponse{Device: &d.Device}
-	return resp, nil
-
+	return &devicev1.CreateDeviceResponse{Device: &d.Device}, nil
 }

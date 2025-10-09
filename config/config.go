@@ -22,10 +22,15 @@ type DatabaseConfig struct {
 	MaxConnections int    `yaml:"maxConnections"`
 }
 
-func (c *Config) LoadConfig(path string) {
+func (c *Config) LoadConfig(path string) error {
 	f, err := os.ReadFile(path)
-	util.Fail(err, "failed to read config")
+	if err != nil {
+		return util.Annotate(err, "failed to read config")
+	}
 
-	err = yaml.Unmarshal(f, c)
-	util.Fail(err, "failed to parse config")
+	if err := yaml.Unmarshal(f, c); err != nil {
+		return util.Annotate(err, "failed to parse config")
+	}
+
+	return nil
 }

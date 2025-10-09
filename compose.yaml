@@ -1,7 +1,7 @@
 ---
 services:
   grpc-device-logging:
-    image: yaninyzwitty/grpc-device-logging
+    # image: yaninyzwitty/grpc-device-logging
     build:
       context: .
       dockerfile: Dockerfile
