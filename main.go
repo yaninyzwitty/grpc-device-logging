@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,7 +25,6 @@ import (
 	"github.com/yaninyzwitty/grpc-device-logging/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
-	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type server struct {
@@ -67,12 +68,10 @@ func main() {
 
 	// Health check registration
 	healthServer := health.NewServer()
-	healthgrpc.RegisterHealthServer(s, healthServer)
+	healthpb.RegisterHealthServer(s, healthServer)
 
 	ns := newServer(ctx, cfg, reg)
 	devicev1.RegisterCloudServiceServer(s, ns)
-
-	slog.Info("gRPC server starting", "port", cfg.AppPort)
 
 	// Async health toggler (example mock logic)
 	go func() {
@@ -88,10 +87,53 @@ func main() {
 		}
 	}()
 
-	if err := s.Serve(lis); err != nil {
-		slog.Error("failed to serve", "error", err)
-		os.Exit(1)
+	// Channel to catch OS termination signals
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	// serve in a go-routine
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			slog.Error("failed to serve", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	slog.Info("gRPC server starting", "port", cfg.AppPort)
+
+	// Block until signal is received
+	<-stop
+
+	slog.Warn("Shutdown signal received, marking health as NOT_SERVING...")
+	healthServer.SetServingStatus(system, healthpb.HealthCheckResponse_NOT_SERVING)
+
+	// Optional: Drain connections for Envoy/NLB (AWS uses 5s target deregistration delay by default)
+	time.Sleep(5 * time.Second)
+
+	gracefulStop := make(chan struct{})
+
+	go func() {
+		// Waits for in-flight requests to complete
+		s.GracefulStop()
+		close(gracefulStop)
+
+	}()
+
+	select {
+	case <-gracefulStop:
+		slog.Info("Server stopped gracefully ")
+	case <-time.After(10 * time.Second): // Grace period timeout
+		slog.Warn("Graceful shutdown timed out, forcing stop ")
+		s.Stop()
+
 	}
+
+	// Cleanup resources
+	slog.Info("Closing database pool...")
+	ns.db.Close()
+
+	slog.Info("Shutdown complete ")
+
 }
 
 func newServer(ctx context.Context, cfg *config.Config, reg *prometheus.Registry) *server {
