@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: latest
+          go-version: stable # or "1.23.x" for a pinned version
 
       # Cache Go modules
       - name: Cache Go Modules
@@ -31,7 +31,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      # Optional: cache golangci-lint itself to speed up installs
+      # Cache golangci-lint itself
       - name: Cache golangci-lint
         uses: actions/cache@v4
         with:
@@ -40,7 +40,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-golangci-
 
-      - name: golangci-lint
+      - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.1
