@@ -1,6 +1,6 @@
 module "ecr" {
   source  = "terraform-aws-modules/ecr/aws"
-  version = "3.1.0"
+  version = "~> 3.1.0"
 
   for_each = toset(var.github_repos)
 
@@ -12,10 +12,10 @@ module "ecr" {
         rulePriority = 1,
         description  = "Keep last 30 images",
         selection = {
-          tagStatus = "tagged",
-          tagPatternList : ["v"]
-          countType   = "imageCountMoreThan",
-          countNumber = 30
+          tagStatus      = "tagged",
+          tagPatternList = ["v"]
+          countType      = "imageCountMoreThan",
+          countNumber    = 30
         },
         action = {
           type = "expire"

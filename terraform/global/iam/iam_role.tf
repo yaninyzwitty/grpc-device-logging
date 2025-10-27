@@ -5,7 +5,7 @@ locals {
 
 module "iam_policy" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-policy"
-  version = "6.2.1"
+  version = "~> 6.2.1"
 
   name = "github-actions"
 
@@ -36,7 +36,7 @@ module "iam_policy" {
 
 module "iam_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role"
-  version = "6.2.1"
+  version = "~> 6.2.1"
 
   name = "github-actions"
 

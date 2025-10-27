@@ -1,7 +1,6 @@
 variable "region" {
-  type = string
-
-  description = "Aws region to provision the infrastracture"
+  type        = string
+  description = "AWS region to provision the infrastructure"
 
 }
 

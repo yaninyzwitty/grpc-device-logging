@@ -1,4 +1,4 @@
 grafana.json
 test.js
 config.yaml
-global.tfvars
+globals.tfvars
