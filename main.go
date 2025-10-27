@@ -20,6 +20,7 @@ import (
 	"github.com/yaninyzwitty/grpc-device-logging/device"
 	devicev1 "github.com/yaninyzwitty/grpc-device-logging/gen/device/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 
 	mon "github.com/yaninyzwitty/grpc-device-logging/metrics"
 	"github.com/yaninyzwitty/grpc-device-logging/util"
@@ -65,6 +66,7 @@ func main() {
 	}
 
 	s := grpc.NewServer()
+	reflection.Register(s)
 
 	// Health check registration
 	healthServer := health.NewServer()
@@ -73,7 +75,7 @@ func main() {
 	ns := newServer(ctx, cfg, reg)
 	devicev1.RegisterCloudServiceServer(s, ns)
 
-	// Async health toggler (example mock logic)
+	// Async health toggler
 	go func() {
 		status := healthpb.HealthCheckResponse_SERVING
 		for {
