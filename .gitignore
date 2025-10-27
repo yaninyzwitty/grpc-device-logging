@@ -1,4 +1,49 @@
 grafana.json
 test.js
 config.yaml
-globals.tfvars
+
+*.tfvars
+# Local .terraform directories
+**/.terraform/*
+**/.terraform.lock.hcl
+
+# Terraform state files
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Backup and crash files
+*.tfvars.backup
+*.backup
+*.log
+
+# Sensitive variable files
+*.tfvars
+*.tfvars.json
+
+# Override files (local settings, do not commit)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI configuration files
+.terraformrc
+terraform.rc
+
+# Provider plugins (if you download manually)
+terraform-provider-*
+
+# Ignore local IDE/editor configs
+.vscode/
+.idea/
+.DS_Store
+
+# Ignore plan outputs
+*.plan
+terraform.tfplan
+
+# Local test configs
+local.auto.tfvars
+terraform.local.tfvars
